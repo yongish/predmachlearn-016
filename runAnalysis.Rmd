@@ -1,0 +1,61 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Zhiyong Tan"
+date: "Monday, December 15, 2014"
+output: html_document
+---
+
+Download the training and testing data if they weren't already downloaded.
+```{r}
+if (!file.exists("pml-training.csv")) {
+  download.file("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv","pml-training.csv")
+  download.file("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv","pml-testing.csv")
+}
+```
+
+Load the training and testing data.
+```{r}
+library(dplyr)
+training <- tbl_df(read.csv("pml-training.csv"))
+testing <- tbl_df(read.csv("pml-testing.csv"))
+```
+
+Remove irrelevant data, including indexes (problem_id, X).  
+Remove all non-varying data in testing and training datasets.  
+Replace invalid values (such as #DIV/0!) with NA.  
+Find the columns in the testing data which are all NAs.
+```{r}
+training[training=="DIV/0!"] <- NA
+testing[testing=="DIV/0!"] <- NA
+
+training$X <- NULL
+testing$X <- NULL
+training$problem_id <- NULL
+testing$problem_id <- NULL
+
+# Column indexes that have > 1 unique value in both training and testing sets
+# considered separately.
+keep <- intersect(as.vector(which(sapply(apply(testing,2,unique),function(x) length(x) > 1))),
+                  as.vector(which(sapply(apply(training,2,unique),function(x) length(x) > 1))))
+          
+# Keep only the aforeementioned columns. Keep classe in training data as well, 
+# since it is not in testing data.
+training <- training[,c(keep,length(training))]
+testing <- testing[,keep]
+```
+
+Use a gbm() for the machine learning model, and 5-fold cross-validation to 
+estimate out-of-sample error.
+```{r}
+library(caret)
+trainControl <- trainControl(method = "cv",number = 5)
+modFit <- train(classe ~ .,method="gbm",data=training,trControl=trainControl)
+```
+
+The estimated out-of-sample error is `r signif(1 - max(modFit$results$Accuracy), digits=3)` 
+with standard deviation of `r signif(modFit$results$AccuracySD[which.max(modFit$results$Accuracy)], digits=3)`.
+
+The testing predictions are computed as follows:
+```{r}
+predict(modFit,testing)
+```
